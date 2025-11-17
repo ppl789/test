@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>jsPsych Pipe 实验示例</title>
+    <title>jsPsych Pipe 实验示例 (使用 Experiment ID)</title>
     <script src="https://unpkg.com/jspsych@7.3.3"></script>
     <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
     <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.3"></script>
     <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css">
     <style>
-        /* 简单的固定十字样式 */
         .fixation-cross {
             font-size: 60px;
             text-align: center;
@@ -21,32 +20,40 @@
     // 初始化 jsPsych
     const jsPsych = initJsPsych({
         display_element: document.body,
-        // 设置实验结束时的回调函数，调用数据保存函数
+        // 设置实验结束时的回调函数
         on_finish: function() {
             saveDataToServer();
         }
     });
 
-    // ----------------------------------------------------
-    // ⬇️ 关键数据保存函数：将数据发送到 jsPsych Pipe ⬇️
-    // ----------------------------------------------------
+    // ----------------------------------------------------------------------
+    // ⬇️ 关键数据保存函数：使用 experimentID 在 Body 中进行认证 ⬇️
+    // ----------------------------------------------------------------------
     function saveDataToServer() {
         
-        // ❗❗❗ 在部署前，请务必替换下面的占位符 ❗❗❗
-        const experimentID = "UeAGhdixenAm"; 
+        // ❗❗❗ 替换成您真实的 Experiment ID (不是 Secret Key) ❗❗❗
+        const EXPERIMENT_ID = "UeAGhdixenAm"; 
         
-        // 获取所有实验数据，并将其格式化为 JSON 字符串
-        const data_to_save = jsPsych.data.get().json();
+        // 获取所有实验数据，并将其格式化为 JSON 字符串，作为 Body 的一部分
+        const data_string = jsPsych.data.get().json();
+
+        // 构造发送到 Pipe 服务器的 Body 结构
+        const payload = {
+            experimentID: EXPERIMENT_ID,
+            // 可选：指定文件名，通常包含参与者ID或时间戳
+            filename: `data_${EXPERIMENT_ID}_${Date.now()}.json`, 
+            data: data_string // 放置您的核心实验数据
+        };
+
 
         // 使用 fetch API 向 jsPsych Pipe 发送数据
         fetch("https://pipe.jspsych.org/api/data/", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                // 附带您的 Pipe 密钥以验证身份
-                "experimentID": experimentID 
+                // ⚠️ 注意：这里移除了 Pipe-Secret
             },
-            body: data_to_save
+            body: JSON.stringify(payload)
         })
         .then(response => {
             if (response.ok) {
@@ -54,47 +61,41 @@
                 alert("实验完成，数据已成功保存至 Pipe！感谢您的参与！");
             } else {
                 // 数据发送失败的处理
-                alert("数据保存失败，请联系研究人员。错误码：" + response.status);
+                alert("数据保存失败，请联系研究人员。错误码：" + response.status + "。请切换回 Pipe-Secret 模式。");
             }
         })
         .catch(error => {
-            // 网络错误处理
             console.error('Network Error:', error);
             alert("网络连接错误，数据可能未能保存。");
         });
     }
 
     // ----------------------------------------------------
-    // ⬇️ 实验时间线定义 (简单的颜色反应时任务) ⬇️
+    // ⬇️ 实验时间线定义 (与之前代码相同) ⬇️
     // ----------------------------------------------------
 
     let timeline = [];
 
-    // 1. 欢迎和指导语
     const welcome = {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: '<h1>欢迎参加实验！</h1><p>指导语：看到红色，按 J 键；看到蓝色，按 K 键。<br>按任意键开始。</p>',
     };
     timeline.push(welcome);
     
-    // 3. 反应时任务循环 (10 个试次)
     for (let i = 0; i < 10; i++) {
-        // 随机选择刺激颜色和正确反应键
         const is_red = Math.random() < 0.5;
         const color = is_red ? '红色' : '蓝色';
-        const correct_key = is_red ? 'j' : 'k'; // 红色 = j, 蓝色 = k
+        const correct_key = is_red ? 'j' : 'k'; 
         const stimulus_text = `<p style="font-size: 30px; color: ${is_red ? 'red' : 'blue'};">${color}</p>`;
 
-        // 3.1. 固定十字 (Fixation Cross)
         const fixation = {
             type: jsPsychHtmlKeyboardResponse,
             stimulus: '<div class="fixation-cross">+</div>',
             choices: "NO_KEYS",
-            trial_duration: 500, // 500ms
+            trial_duration: 500,
         };
         timeline.push(fixation);
 
-        // 3.2. 刺激呈现 (Stimulus Presentation)
         const trial = {
             type: jsPsychHtmlKeyboardResponse,
             stimulus: stimulus_text,
@@ -105,15 +106,13 @@
                 stimulus_color: color
             },
             on_finish: function(data){
-                // 记录参与者的反应是否正确
                 data.correct = jsPsych.pluginAPI.compareKeys(data.response, data.correct_response);
-                data.rt_ms = data.rt; // 记录反应时
+                data.rt_ms = data.rt; 
             }
         };
         timeline.push(trial);
     }
     
-    // 4. 实验结束语
     const debrief = {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: '<h1>实验全部完成！</h1><p>感谢您的参与。请等待数据保存弹窗提示，并关闭本页面。</p>',
